@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Data Formatter Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 700px;
+            margin: 40px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        #fileInput {
+            display: none;
+        }
+        label {
+            display: block;
+            text-align: center;
+            padding: 12px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        label:hover {
+            background-color: #2980b9;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #27ae60;
+        }
+        #downloadButton {
+            background-color: #e74c3c;
+        }
+        #downloadButton:hover {
+            background-color: #c0392b;
+        }
+        #status {
+            margin-top: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f4;
+        }
+        #searchContainer {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #searchInput {
+            padding: 8px;
+            width: 80%;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        #searchButton {
+            background-color: #3498db;
+        }
+        #searchButton:hover {
+            background-color: #2980b9;
+        }
+        .summary {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSV Data Formatter Tool</h1>
+        <input type="file" id="fileInput" accept=".csv">
+        <label for="fileInput">Choose CSV File</label>
+        <button id="downloadButton" disabled>Download CSV</button>
+        <button id="processButton" disabled>Process CSV</button>
+
+        <!-- Search filter -->
+        <div id="searchContainer">
+            <input type="text" id="searchInput" placeholder="Search Lineitem Name...">
+            <button id="searchButton">Search</button>
+        </div>
+
+        <div id="status"></div>
+
+        <!-- Summary details -->
+        <div id="summary" class="summary" style="display:none;">
+            <div id="totalCustomers"></div>
+            <div id="totalFiltered"></div>
+            <div id="dateRange"></div>
+        </div>
+
+        <div id="outputTable"></div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const processButton = document.getElementById('processButton');
+        const downloadButton = document.getElementById('downloadButton');
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const statusDiv = document.getElementById('status');
+        const outputTableDiv = document.getElementById('outputTable');
+        const totalCustomersDiv = document.getElementById('totalCustomers');
+        const totalFilteredDiv = document.getElementById('totalFiltered');
+        const dateRangeDiv = document.getElementById('dateRange');
+        const summaryDiv = document.getElementById('summary');
+        let csvData, outputCSV, filteredData;
+
+        // Predefined customer data
+        const predefinedData = [
+            ['Aman', 'Ofcl', '+918826155917'],
+            ['Pawan', 'Sharma', '+917529938001'],
+            ['Piyush', 'Dhawan', '+919891636816'],
+            ['Saurabh', 'Kattar', '+919999251103'],
+            ['Japna', 'Dhawan', '+918882417401'],
+        ];
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                processButton.disabled = false;
+                statusDiv.textContent = 'File selected: ' + file.name;
+            }
+        });
+
+        processButton.addEventListener('click', () => {
+            const file = fileInput.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    complete: function(results) {
+                        csvData = results.data;
+                        filteredData = csvData;  // Store original data
+                        processCSV(csvData);
+                    }
+                });
+            }
+        });
+
+        searchButton.addEventListener('click', () => {
+            const searchTerm = searchInput.value.toLowerCase();
+            if (searchTerm && csvData) {
+                const header = csvData[0];
+                const lineitemIndex = header.indexOf('Lineitem name');
+                filteredData = csvData.filter((row, index) => {
+                    if (index === 0) return true;  // Keep header
+                    return row[lineitemIndex] && row[lineitemIndex].toLowerCase().includes(searchTerm);
+                });
+                processCSV(filteredData);
+            }
+        });
+
+        downloadButton.addEventListener('click', () => {
+            if (outputCSV) {
+                downloadCSV(outputCSV);
+            }
+        });
+
+        function processCSV(data) {
+            const header = data[0];
+            const billingNameIndex = header.indexOf('Billing Name');
+            const phoneIndex = header.indexOf('Phone');
+            const lineitemIndex = header.indexOf('Lineitem name');
+
+            const outputData = [['first_name', 'last_name', 'phone']];  // Excluding lineitem from CSV output
+            let tableHTML = '<table><tr><th>First Name</th><th>Last Name</th><th>Phone</th><th>Lineitem</th></tr>';
+            let totalCustomers = 0;
+
+            // Create a Set to store unique phone numbers
+            const uniquePhones = new Set();
+
+            for (let i = 1; i < data.length; i++) {
+                const row = data[i];
+                if (row.length === header.length) {
+                    const [firstName, lastName] = splitName(row[billingNameIndex] || '');
+                    const phone = formatPhone(row[phoneIndex] || '');
+                    const lineitem = row[lineitemIndex] || '';
+
+                    // Only add valid entries where First Name, Last Name, and Phone are present
+                    if (firstName && lastName && phone && !uniquePhones.has(phone)) {
+                        uniquePhones.add(phone);  // Add phone to Set
+                        outputData.push([firstName, lastName, phone]);  // Exclude lineitem in CSV
+                        tableHTML += `<tr><td>${firstName}</td><td>${lastName}</td><td>${phone}</td><td>${lineitem}</td></tr>`;
+                        totalCustomers++;
+                    }
+                }
+            }
+
+            // Add predefined data to output
+            for (const predefined of predefinedData) {
+                if (!uniquePhones.has(predefined[2])) {  // Check if phone is unique
+                    outputData.push(predefined);
+                    tableHTML += `<tr><td>${predefined[0]}</td><td>${predefined[1]}</td><td>${predefined[2]}</td><td></td></tr>`;
+                    totalCustomers++;
+                    uniquePhones.add(predefined[2]);  // Add phone to Set
+                }
+            }
+
+            tableHTML += '</table>';
+            outputTableDiv.innerHTML = tableHTML;
+
+            // Display summary information
+            totalCustomersDiv.textContent = 'Total customer data on order sheet: ' + (data.length - 1 + predefinedData.length);  // Exclude header
+            totalFilteredDiv.textContent = 'Total searched filtered data: ' + totalCustomers;
+            dateRangeDiv.textContent = 'Data from start date to last date'; // Placeholder for actual date range logic
+
+            summaryDiv.style.display = 'block';
+            outputCSV = Papa.unparse(outputData);
+            downloadButton.disabled = false;
+        }
+
+        function splitName(fullName) {
+            const nameParts = fullName.trim().split(' ');
+            const firstName = nameParts.shift();
+            const lastName = nameParts.join(' ');
+            return [firstName, lastName];
+        }
+
+        function formatPhone(phone) {
+            phone = phone.trim().replace(/[^\d]/g, '');  // Remove non-digit characters
+            return phone ? `+${phone}` : '';  // Add "+" sign only if phone is not blank
+        }
+
+        function downloadCSV(csv) {
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (navigator.msSaveBlob) { // IE 10+
+                navigator.msSaveBlob(blob, 'output.csv');
+            } else {
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute('download', 'output.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    </script>
+</body>
+</html>
